@@ -1,104 +1,20 @@
 package com.akintel.familyshield;
-
-import android.app.Activity;
-import android.app.NotificationManager;
-import android.content.Intent;
-import android.os.Bundle;
-import android.provider.Settings;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.TextView;
-import android.content.SharedPreferences;
-import org.json.JSONArray;
-import org.json.JSONObject;
-
+import android.Manifest; import android.app.Activity; import android.app.AppOpsManager; import android.app.usage.UsageStats; import android.app.usage.UsageStatsManager; import android.content.Context; import android.content.Intent; import android.content.SharedPreferences; import android.content.pm.PackageManager; import android.location.LocationManager; import android.os.Build; import android.os.Bundle; import android.provider.Settings; import android.view.Gravity; import android.widget.*; import org.json.JSONArray; import org.json.JSONObject; import java.util.*;
 public class MainActivity extends Activity {
-    private LinearLayout list;
-    private TextView status;
-    private SharedPreferences prefs;
-
-    @Override public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences("family_shield_local", MODE_PRIVATE);
-        buildUi();
-        render();
-    }
-
-    private int dp(float n) { return (int)(n * getResources().getDisplayMetrics().density); }
-
-    private TextView text(String value, int size) {
-        TextView t = new TextView(this);
-        t.setText(value); t.setTextSize(size); t.setTextColor(0xFFEDF4FA);
-        t.setPadding(dp(12), dp(10), dp(12), dp(10));
-        return t;
-    }
-
-    private Button button(String label, Runnable action) {
-        Button b = new Button(this); b.setText(label);
-        b.setOnClickListener(v -> action.run()); return b;
-    }
-
-    private void buildUi() {
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(18), dp(16), dp(18));
-        root.setBackgroundColor(0xFF071426);
-        scroll.addView(root);
-
-        TextView title = text("AK INTEL  |  FAMILY SHIELD", 22);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title);
-        root.addView(text("Transparent family-safety prototype", 14));
-        root.addView(text("This screen stores only notification app name, visible title/sender label (if supplied by Android), and time. It does NOT read or save message text, previews, images, or chats. Labels may be generic or unavailable.", 14));
-
-        status = text("", 14);
-        root.addView(status);
-        root.addView(button("Open Android Notification Access", () ->
-            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))));
-        root.addView(button("Refresh local activity", this::render));
-        root.addView(button("Delete all saved activity", () -> {
-            prefs.edit().remove("events").apply();
-            render();
-        }));
-
-        root.addView(text("Recent notification labels", 18));
-        list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        root.addView(list);
-        root.addView(text("Privacy: access can be revoked at any time in Android Settings. Use only with the child's knowledge and agreement.", 13));
-        setContentView(scroll);
-    }
-
-    private boolean accessEnabled() {
-        String enabled = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
-        return enabled != null && enabled.contains(getPackageName());
-    }
-
-    private void render() {
-        if (status != null) status.setText(accessEnabled()
-            ? "Notification access: enabled on this device"
-            : "Notification access: not enabled");
-        if (list == null) return;
-        list.removeAllViews();
-        try {
-            JSONArray arr = new JSONArray(prefs.getString("events", "[]"));
-            if (arr.length() == 0) {
-                list.addView(text("No notification activity saved yet.", 14));
-                return;
-            }
-            for (int i = arr.length() - 1; i >= 0; i--) {
-                JSONObject o = arr.getJSONObject(i);
-                String app = o.optString("app", "App");
-                String label = o.optString("label", "Sender not shown");
-                long time = o.optLong("time", 0);
-                list.addView(text(app + "  •  " + label + "\n" + android.text.format.DateFormat.format("dd MMM, hh:mm a", time), 14));
-            }
-        } catch (Exception e) {
-            list.addView(text("Could not read local report.", 14));
-        }
-    }
+ private SharedPreferences prefs; private LinearLayout usageList, notificationList; private TextView usageStatus; private static final int LOCATION_REQ=410;
+ public void onCreate(Bundle b){super.onCreate(b);prefs=getSharedPreferences("family_shield_local",MODE_PRIVATE);buildUi();renderUsage();renderNotifications();renderLocation();}
+ int dp(float n){return (int)(n*getResources().getDisplayMetrics().density);}
+ TextView txt(String s,int z){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(0xFFEDF4FA);t.setPadding(dp(12),dp(8),dp(12),dp(8));return t;}
+ Button btn(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setOnClickListener(v->r.run());return b;}
+ void buildUi(){ScrollView sc=new ScrollView(this);LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setPadding(dp(16),dp(18),dp(16),dp(18));root.setBackgroundColor(0xFF071426);sc.addView(root);TextView title=txt("AK INTEL | FAMILY SHIELD",22);title.setGravity(Gravity.CENTER);root.addView(title);root.addView(txt("Child-device prototype • transparent, local-only reporting",14));root.addView(txt("This prototype stores notification app + visible title only (never message bodies), reads app-usage totals after Usage Access is enabled, and collects location only after the user starts visible sharing. Data stays on this phone; it is NOT sent to a parent dashboard yet.",14));
+ root.addView(txt("APP USAGE",19));root.addView(btn("Open Usage Access settings",()->startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))));root.addView(btn("Refresh today's app usage",this::renderUsage));usageStatus=txt("",13);root.addView(usageStatus);usageList=new LinearLayout(this);usageList.setOrientation(1);root.addView(usageList);
+ root.addView(txt("LOCATION SHARING",19));root.addView(btn("Start visible location sharing",this::startLocation));root.addView(btn("Stop location sharing",()->{stopService(new Intent(this,LocationShareService.class));Toast.makeText(this,"Location sharing stopped",Toast.LENGTH_SHORT).show();}));root.addView(btn("Show last saved location",this::renderLocation));root.addView(txt("Location is collected only after a clear user action and Android permission. This prototype does not upload coordinates.",13));
+ root.addView(txt("NOTIFICATION SENDER LABELS",19));root.addView(btn("Open Android Notification Access",()->startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))));root.addView(btn("Refresh notification labels",this::renderNotifications));root.addView(btn("Delete saved notification labels",()->{prefs.edit().remove("events").apply();renderNotifications();}));notificationList=new LinearLayout(this);notificationList.setOrientation(1);root.addView(notificationList);root.addView(txt("Permissions can be revoked in Android Settings. Use only with the child's knowledge and agreement.",13));setContentView(sc);}
+ boolean usageAllowed(){AppOpsManager a=(AppOpsManager)getSystemService(Context.APP_OPS_SERVICE);return a.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,android.os.Process.myUid(),getPackageName())==AppOpsManager.MODE_ALLOWED;}
+ void renderUsage(){if(usageList==null)return;usageList.removeAllViews();if(!usageAllowed()){usageStatus.setText("Usage Access: not enabled. Enable it in Settings, then refresh.");return;}usageStatus.setText("Usage Access enabled • today's totals on this device");long now=System.currentTimeMillis(),start=now-(now%86400000L);UsageStatsManager m=(UsageStatsManager)getSystemService(USAGE_STATS_SERVICE);Map<String,UsageStats> map=m.queryAndAggregateUsageStats(start,now);List<UsageStats> rows=new ArrayList<>();if(map!=null)for(UsageStats s:map.values())if(s.getTotalTimeInForeground()>0)rows.add(s);rows.sort((a,b)->Long.compare(b.getTotalTimeInForeground(),a.getTotalTimeInForeground()));int n=0;for(UsageStats s:rows){String p=s.getPackageName();if(p.equals(getPackageName()))continue;String label=p;try{label=getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(p,0)).toString();}catch(Exception ignored){}usageList.addView(txt(label+" • "+(s.getTotalTimeInForeground()/60000L)+" min",14));if(++n==20)break;}if(n==0)usageList.addView(txt("No usage data available yet.",14));}
+ void startLocation(){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION},LOCATION_REQ);return;}if(!getSystemService(LocationManager.class).isLocationEnabled()){Toast.makeText(this,"Turn on device Location first.",Toast.LENGTH_LONG).show();return;}Intent i=new Intent(this,LocationShareService.class);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);Toast.makeText(this,"Visible location sharing started.",Toast.LENGTH_LONG).show();}
+ public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(r==LOCATION_REQ&&g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED)startLocation();else if(r==LOCATION_REQ)Toast.makeText(this,"Location permission not granted.",Toast.LENGTH_SHORT).show();}
+ void renderLocation(){String a=prefs.getString("last_lat",null),b=prefs.getString("last_lon",null);if(a==null||b==null)Toast.makeText(this,"No location saved yet.",Toast.LENGTH_SHORT).show();else Toast.makeText(this,"Last local location: "+a+", "+b,Toast.LENGTH_LONG).show();}
+ boolean notificationAccess(){String s=Settings.Secure.getString(getContentResolver(),"enabled_notification_listeners");return s!=null&&s.contains(getPackageName());}
+ void renderNotifications(){if(notificationList==null)return;notificationList.removeAllViews();notificationList.addView(txt(notificationAccess()?"Notification access enabled":"Notification access not enabled",13));try{JSONArray a=new JSONArray(prefs.getString("events","[]"));if(a.length()==0){notificationList.addView(txt("No notification labels saved.",14));return;}for(int i=a.length()-1;i>=0;i--){JSONObject o=a.getJSONObject(i);notificationList.addView(txt(o.optString("app")+" • "+o.optString("label")+" • "+android.text.format.DateFormat.format("dd MMM, hh:mm a",o.optLong("time")),14));}}catch(Exception e){notificationList.addView(txt("Could not read local report.",14));}}
 }
